@@ -1,0 +1,72 @@
+# Build, test and publish to GitHub Pages.
+#
+# The tests run before the build, and a failing test fails the deploy — the
+# site is small enough that there is no reason to ship a red build to save 40
+# seconds.
+#
+# Pages serves this from a project subpath (jayquake.github.io/smiley-socks/),
+# which is why vite.config.ts sets `base: './'` and the app uses HashRouter:
+# relative asset URLs resolve under the subpath, and hash routes survive a
+# refresh without server rewrite rules.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  # Lets you re-publish from the Actions tab without pushing anything.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; queue rather than cancel, so the last push wins
+# and no run is silently dropped mid-flight.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck and test
+        run: |
+          npx tsc --noEmit
+          npm test
+
+      - name: Build
+        run: npx vite build
+
+      # No actions/configure-pages step on purpose. Its outputs exist to inject
+      # a base path, and vite.config.ts hardcodes `base: './'` instead, so the
+      # only thing it added here was `enablement: true` — which fails with
+      # "Resource not accessible by integration", because a workflow token is
+      # not allowed to switch Pages on for a repository. That is a one-time
+      # setting: Settings → Pages → Build and deployment → Source: GitHub
+      # Actions.
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
