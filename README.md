@@ -5,7 +5,7 @@ actually feels, so choosing it *is* the product decision — you start from a
 mood and then pull the face around until it's yours. The brand mark is a small
 cuff hit, and 10% of every order funds mental health support.
 
-**Live:** https://jayquake.github.io/smiley-socks/
+Live-ish demo: build it and open `dist/index.html`, or run `npm run dev`.
 
 ```
 npm install
@@ -40,8 +40,8 @@ squint/tilt, brow height and angle, mouth width/curve/open/wobble, plus marks
 drawing primitives, and `Face.tsx` turns primitives into SVG. Nothing else
 knows how a face is drawn.
 
-The thirteen templates in `templates.ts` are presets of those same numbers, which
-is why editing one costs nothing: there is no "preset mode" to leave.
+The twenty-six templates in `templates.ts` are presets of those same numbers,
+which is why editing one costs nothing: there is no "preset mode" to leave.
 
 `FACE_LIMITS` is the single source of truth for what each number may be. The
 editor clamps against it, `clampFace()` sanitises anything restored from
@@ -170,6 +170,43 @@ The page spells out the three routes and the two traps (someone else's branded
 sock is a trademark regardless of licence; a knitted cuff hit needs a mill and
 a minimum order, where print-on-demand renders it as surface ink).
 
+## Getting it made (`tools/`)
+
+The site can draw a sock; it cannot hand a factory a file. `tools/` is a
+standard-library-only Python package that turns a design record into production
+artwork with no browser in the loop — a queue worker, a CI step, a script over a
+day's orders.
+
+```bash
+cd tools && python3 -m smileysocks export design.json --out ./orders
+```
+
+Out comes a print PNG at the supplier's DPI, the same artwork as vector SVG, an
+A4 proof PDF at true scale with the trim line and the measured drop from the
+cuff, and a manifest of every number pre-press would otherwise measure off a
+screen. The studio's **Text** tab has a *Download design file* button that
+writes the input.
+
+Two decisions worth knowing:
+
+- **The canvas sizes are our own derivation, not a vendor's template.** A full
+  wrap really is the leg circumference by the centreline length, measured from
+  the same geometry the site previews — but suppliers publish their own template
+  per product and those change. Every export where the canvas was measured
+  rather than supplied says so, in the manifest and on the proof, and
+  `--width-mm/--height-mm/--dpi` take the vendor's numbers. What the geometry
+  buys you regardless is proportion: the print lands the right number of
+  millimetres below the cuff at the size the customer was quoted.
+- **The port cannot drift silently.** `face.py`, `sock.py` and `catalog.py`
+  duplicate `face.ts`, `sockMesh.ts` and `catalog.ts`, so `npm test` runs the
+  real TypeScript and writes what it produces to a fixture, and the Python suite
+  asserts it reproduces all of it — path string for path string, 46 faces,
+  every eye shape and mark, both extremes of every limit. Change a curve on
+  either side and the other goes red.
+
+Full detail, including the deliberate limits (photos are not composited; cuff
+text is positioned rather than lettered) is in [`tools/README.md`](tools/README.md).
+
 ## It behaves like a shop
 
 The studio is the point of the brand, but designing something is not the only
@@ -275,14 +312,16 @@ phone heights.
 - Only `data:image/` sources survive a restore, so a stored design can't point
   the preview at someone else's server.
 
-## Deployment
+## Repo notes
 
-Every push to `main` runs `.github/workflows/pages.yml`: typecheck, tests,
-build, publish to GitHub Pages. A failing test fails the deploy.
+This directory is self-contained and unrelated to the apartment finder that
+owns the rest of this repository. The scheduled workflow at
+`.github/workflows/apartment-finder.yml` resets the branch and copies its own
+built site to the repo root, staging entries by name from that build — it never
+touches `smiley-socks/`.
 
-**One-time setup:** Settings → Pages → Build and deployment → Source →
-**GitHub Actions**.
-
-Pages serves this from a project subpath, which is why `vite.config.ts` sets
-`base: './'` and the app uses `HashRouter`. `dist/` is not committed — CI
-builds it.
+`dist/` is committed so the branch is viewable without an install, and so
+publishing later is a no-op. It is generated output: change `src/`, run
+`npm run build`, commit the result. `vite.config.ts` sets `base: './'` and the
+app uses `HashRouter`, so the build works from a subpath such as
+`/csb-zt53jl/smiley-socks/` with no server rewrite rules.
